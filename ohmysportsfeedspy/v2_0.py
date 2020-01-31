@@ -6,7 +6,6 @@ import simplejson as json
 import platform
 import base64
 
-import ohmysportsfeedspy
 from ohmysportsfeedspy.v1_0 import API_v1_0
 
 

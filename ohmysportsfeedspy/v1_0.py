@@ -1,8 +1,7 @@
 import os
 import csv
 import requests
-from datetime import datetime
-import simplejson as json
+import json
 import platform
 import base64
 
