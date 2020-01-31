@@ -1,10 +1,3 @@
-import os
-import csv
-import requests
-from datetime import datetime
-import simplejson as json
-import platform
-import base64
 
 from ohmysportsfeedspy.v1_0 import API_v1_0
 
