@@ -1,5 +1,21 @@
+# MySportsFeeds
+
 *.ini
-*.idea
+results/
+
+# Python
+
 *.pyc
 *.cache
-results/
+
+# Virtual Environments
+
+env/
+venv/
+.env
+.venv
+
+# IDEs
+
+.idea
+.classpath
