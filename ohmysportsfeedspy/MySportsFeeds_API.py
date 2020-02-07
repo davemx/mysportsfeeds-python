@@ -17,52 +17,43 @@ from ohmysportsfeedspy.v1_1 import API_v1_1
 from ohmysportsfeedspy.v1_2 import API_v1_2
 from ohmysportsfeedspy.v2_0 import API_v2_0
 from ohmysportsfeedspy.v2_1 import API_v2_1
+from ohmysportsfeedspy.stores import DataStore, FileStore, validate_data_store, DEFAULT_FILE_STORE_DIRECTORY
 
 
 class MySportsFeeds(object):
     """ Main class for all interaction with the MySportsFeeds API """
 
-    valid_store_types = (None, "file", "s3")
-
     # Constructor
-    def __init__(self, version='1.2', verbose=False, store_type='file', store_location='results/'):
+    def __init__(self, version='1.2', verbose=False, data_store: DataStore = FileStore(DEFAULT_FILE_STORE_DIRECTORY),
+                 store_type=None, store_location=None):
         self.__verify_version(version)
-        self.__verify_store(store_type, store_location)
+
+        data_store = validate_data_store(data_store, store_type, store_location)
 
         self.version = version
         self.verbose = verbose
-        self.store_type = store_type
-        self.store_location = store_location
 
         # Instantiate an instance of the appropriate API depending on version
         if self.version == '1.0':
-            self.api_instance = API_v1_0(self.verbose, self.store_type, self.store_location)
+            self.api_instance = API_v1_0(self.verbose, data_store)
 
         if self.version == '1.1':
-            self.api_instance = API_v1_1(self.verbose, self.store_type, self.store_location)
+            self.api_instance = API_v1_1(self.verbose, data_store)
 
         if self.version == '1.2':
-            self.api_instance = API_v1_2(self.verbose, self.store_type, self.store_location)
+            self.api_instance = API_v1_2(self.verbose, data_store)
 
         if self.version == '2.0':
-            self.api_instance = API_v2_0(self.verbose, self.store_type, self.store_location)
+            self.api_instance = API_v2_0(self.verbose, data_store)
 
         if self.version == '2.1':
-            self.api_instance = API_v2_1(self.verbose, self.store_type, self.store_location)
+            self.api_instance = API_v2_1(self.verbose, data_store)
 
     # Make sure the version is supported
     def __verify_version(self, version):
         if version != '1.0' and version != '1.1' and version != '1.2' and version != '2.0' and version != '2.1':
             raise ValueError("Unrecognized version specified."
                              "Supported versions are: '1.0', '1.1', '1.2', '2.0', '2.1'")
-
-    # Verify the type and location of the stored data
-    def __verify_store(self, store_type, store_location):
-        if store_type not in self.valid_store_types:
-            raise ValueError("Unrecognized storage type specified. Supported values are: None,'file','s3'")
-
-        if store_type is not None and store_location is None:
-            raise ValueError("Must specify a location for stored data.")
 
     # Authenticate against the API (for v1.0)
     def authenticate(self, apikey, password):

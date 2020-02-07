@@ -7,8 +7,7 @@ import json
 import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, IO
-
+from typing import Any, IO, List
 import boto3
 from botocore.exceptions import ClientError
 
@@ -16,48 +15,17 @@ from botocore.exceptions import ClientError
 DEFAULT_FILE_STORE_DIRECTORY: str = "results"
 
 
-def _load_data(data_format: str, input_stream: IO) -> Any:
-    """ Loads the data to an input stream """
-    if data_format == "json":
-        return json.load(input_stream)
-    elif data_format == "xml":
-        return input_stream.read()
-    elif data_format == "csv":
-        reader = csv.reader(input_stream)
-        return list(list(rec) for rec in reader)
-    else:
-        raise AssertionError(f"Invalid data format: {data_format}")
-
-
-def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
-    """ Writes the data to an output stream """
-    if data_format == "json":
-        json.dump(data, output_stream)
-    elif data_format == "xml":
-        output_stream.write(data)
-    elif data_format == "csv":
-        writer = csv.writer(output_stream)
-        for row in data:
-            writer.writerow([row])
-    else:
-        raise AssertionError(f"Invalid data format: {data_format}")
-
-    output_stream.flush()
-
-
-def _store_temp_file(data: Any, data_format: str) -> NamedTemporaryFile:
-    """ Writes the data to a temporary file and returns the file """
-    temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="rw+b", suffix=f".{data_format}")
-    _write_data(data, data_format, temp_file)
-    return temp_file
-
-
 class DataStore:
     """ Base Data Store """
-    name: str
 
-    def __init__(self, name: str):
-        self.name = name
+    _initialized: bool = False
+
+    def __init__(self):
+        pass
+
+    def _initialize_store(self):
+        """ Initialize the store """
+        pass
 
     def exists(self, league: str, season: str, feed: str, data_format: str, params: dict) -> bool:
         """ Stub method for subclasses """
@@ -91,22 +59,30 @@ class DataStore:
 class FileStore(DataStore):
     """ Local Filesystem Store """
 
-    dir_path: Path
+    TYPE_NAME: str = "file"
+    _dir_path: Path
 
     def __init__(self, directory: str):
-        super().__init__("file")
-        self.dir_path = Path(directory if directory is not None else DEFAULT_FILE_STORE_DIRECTORY)
-        if not self.dir_path.exists():
-            self.dir_path.mkdir(parents=True)
+        super().__init__()
+        self._dir_path = Path(directory if directory is not None else DEFAULT_FILE_STORE_DIRECTORY)
+
+    def _initialize_store(self):
+        if not self._initialized:
+            super()._initialize_store()
+            if not self._dir_path.exists():
+                self._dir_path.mkdir(parents=True)
+            self._initialized = True
 
     def exists(self, league: str, season: str, feed: str, data_format: str, params: dict) -> bool:
+        self._initialize_store()
         filename: str = self.resolve_filename(league, season, feed, data_format, params)
-        file_path: Path = self.dir_path / filename
+        file_path: Path = self._dir_path / filename
         return file_path.exists()
 
     def load(self, league: str, season: str, feed: str, data_format: str, params: dict) -> Any:
+        self._initialize_store()
         filename: str = self.resolve_filename(league, season, feed, data_format, params)
-        file_path: Path = self.dir_path / filename
+        file_path: Path = self._dir_path / filename
         data: Any
         if file_path.exists():
             with file_path.open("r+b") as infile:
@@ -116,8 +92,9 @@ class FileStore(DataStore):
         return data
 
     def store(self, data: Any, league: str, season: str, feed: str, data_format: str, params: dict) -> Path:
+        self._initialize_store()
         filename: str = self.resolve_filename(league, season, feed, data_format, params)
-        file_path: Path = self.dir_path / filename
+        file_path: Path = self._dir_path / filename
         with file_path.open("w") as file:
             _write_data(data, data_format, file)
         return file_path
@@ -126,17 +103,30 @@ class FileStore(DataStore):
 class S3Store(DataStore):
     """ AWS S3 Store """
 
+    TYPE_NAME: str = "s3"
     bucket: Any
     prefix: str
-    s3: Any
+    _s3: Any
 
     def __init__(self, bucket_name: str, prefix: str = None):
-        super().__init__("s3")
+        super().__init__()
         self.prefix = prefix
-        self.s3 = boto3.resource("s3")
-        self.bucket = self.s3.Bucket(bucket_name)
+        self._s3 = boto3.resource("s3")
+        self.bucket = self._s3.Bucket(bucket_name)
+
+    def _initialize_store(self):
+        if not self._initialized:
+            super()._initialize_store()
+            try:
+                self.bucket.load()
+            except ClientError as e:
+                logging.error("Client error checking for bucket existence")
+                logging.error(e)
+                raise e
+            self._initialized = True
 
     def exists(self, league: str, season: str, feed: str, data_format: str, params: dict) -> bool:
+        self._initialize_store()
         object_key: str = self._get_object_key(league, season, feed, data_format, params)
         try:
             self.bucket.Object(object_key).load()
@@ -153,6 +143,7 @@ class S3Store(DataStore):
             return True
 
     def load(self, league: str, season: str, feed: str, data_format: str, params: dict) -> Any:
+        self._initialize_store()
         object_key: str = self._get_object_key(league, season, feed, data_format, params)
         s3_object: Any = self.bucket.Object(object_key)
 
@@ -170,6 +161,7 @@ class S3Store(DataStore):
         return data
 
     def store(self, data: Any, league: str, season: str, feed: str, data_format: str, params: dict) -> Any:
+        self._initialize_store()
         object_key: str = self._get_object_key(league, season, feed, data_format, params)
         s3_object = self.bucket.Object(object_key)
 
@@ -193,3 +185,50 @@ class S3Store(DataStore):
         else:
             object_key = f"{self.prefix}/{filename}"
         return object_key
+
+
+def validate_data_store(data_store: DataStore, store_type: str, store_location: str) -> DataStore:
+    """ Provide legacy data storage support for specified parameters. """
+    if store_type is not None:
+        if store_type == FileStore.TYPE_NAME:
+            return FileStore(store_location if not None else DEFAULT_FILE_STORE_DIRECTORY)
+        else:
+            raise ValueError(f"Unrecognized storage type specified. Supported values are: None, {FileStore.TYPE_NAME}")
+
+    return data_store
+
+
+def _load_data(data_format: str, input_stream: IO) -> Any:
+    """ Loads the data to an input stream. """
+    if data_format == "json":
+        return json.load(input_stream)
+    elif data_format == "xml":
+        return input_stream.read()
+    elif data_format == "csv":
+        reader = csv.reader(input_stream)
+        return list(list(rec) for rec in reader)
+    else:
+        raise AssertionError(f"Invalid data format: {data_format}")
+
+
+def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
+    """ Writes the data to an output stream. """
+    if data_format == "json":
+        json.dump(data, output_stream)
+    elif data_format == "xml":
+        output_stream.write(data)
+    elif data_format == "csv":
+        writer = csv.writer(output_stream)
+        for row in data:
+            writer.writerow([row])
+    else:
+        raise AssertionError(f"Invalid data format: {data_format}")
+
+    output_stream.flush()
+
+
+def _store_temp_file(data: Any, data_format: str) -> NamedTemporaryFile:
+    """ Writes the data to a temporary file and returns the file. """
+    temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="rw+b", suffix=f".{data_format}")
+    _write_data(data, data_format, temp_file)
+    return temp_file

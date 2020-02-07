@@ -2,11 +2,12 @@ import csv
 import requests
 import json
 import platform
+from typing import Any
 import base64
 import logging
 
 import ohmysportsfeedspy
-from ohmysportsfeedspy.stores import DataStore, FileStore
+from ohmysportsfeedspy.stores import DataStore
 
 
 # API class for dealing with v1.0 of the API
@@ -15,7 +16,7 @@ class API_v1_0(object):
     data_store: DataStore
 
     # Constructor
-    def __init__(self, verbose, data_store=None, store_type=None, store_location=None):
+    def __init__(self, verbose, data_store=None):
         self.base_url = "https://api.mysportsfeeds.com/v1.0/pull"
         self.headers = {
             'Accept-Encoding': 'gzip',
@@ -23,10 +24,7 @@ class API_v1_0(object):
         }
 
         self.verbose = verbose
-
-        # Create data store if legacy store_type is file
-        if not data_store and store_type == "file":
-            self.data_store = FileStore(store_location)
+        self.data_store = data_store
 
         self.valid_feeds = [
             'cumulative_player_stats',
@@ -78,7 +76,7 @@ class API_v1_0(object):
         else:
             return "{base_url}/{league}/{season}/{feed}.{output}".format(base_url=self.base_url, feed=feed, league=league, season=season, output=output_format)
 
-    # Save a feed response based on the store_type
+    # Save a feed response based on the data store
     def __save_feed(self, response, league, season, feed, output_format, params):
         # Save to memory regardless of selected method
         if output_format == "json":
@@ -152,6 +150,7 @@ class API_v1_0(object):
 
         r = requests.get(url, params=params, headers=self.headers)
 
+        data: Any = None
         if r.status_code == 200:
             if self.data_store is not None:
                 self.__save_feed(r, league, season, feed, output_format, params)
@@ -167,10 +166,11 @@ class API_v1_0(object):
             if self.verbose:
                 print("Data hasn't changed since last call")
 
-            if self.data_store.exists(league, season, feed, output_format, params):
-                data = self.data_store.load(league, season, feed, output_format, params)
-            else:
-                logging.debug("Data hasn't changed since last call but the data does not exist in the store")
+            if self.data_store is not None:
+                if self.data_store.exists(league, season, feed, output_format, params):
+                    data = self.data_store.load(league, season, feed, output_format, params)
+                else:
+                    logging.debug("Data hasn't changed since last call but the data does not exist in the store")
 
         else:
             raise Warning("API call failed with error: {error}".format(error=r.status_code))
