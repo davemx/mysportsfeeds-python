@@ -1,18 +1,21 @@
-import os
 import csv
 import requests
 import json
 import platform
 import base64
+import logging
 
 import ohmysportsfeedspy
+from ohmysportsfeedspy.stores import DataStore, FileStore
 
 
 # API class for dealing with v1.0 of the API
 class API_v1_0(object):
 
+    data_store: DataStore
+
     # Constructor
-    def __init__(self, verbose, store_type=None, store_location=None):
+    def __init__(self, verbose, data_store=None, store_type=None, store_location=None):
         self.base_url = "https://api.mysportsfeeds.com/v1.0/pull"
         self.headers = {
             'Accept-Encoding': 'gzip',
@@ -20,8 +23,10 @@ class API_v1_0(object):
         }
 
         self.verbose = verbose
-        self.store_type = store_type
-        self.store_location = store_location
+
+        # Create data store if legacy store_type is file
+        if not data_store and store_type == "file":
+            self.data_store = FileStore(store_location)
 
         self.valid_feeds = [
             'cumulative_player_stats',
@@ -73,22 +78,6 @@ class API_v1_0(object):
         else:
             return "{base_url}/{league}/{season}/{feed}.{output}".format(base_url=self.base_url, feed=feed, league=league, season=season, output=output_format)
 
-    # Generate the appropriate filename for a feed request
-    def __make_output_filename(self, league, season, feed, output_format, params):
-        filename = "{feed}-{league}-{season}".format(league=league.lower(),
-            season=season,
-            feed=feed)
-
-        if "gameid" in params:
-            filename += "-" + params["gameid"]
-
-        if "fordate" in params:
-            filename += "-" + params["fordate"]
-
-        filename += "." + output_format
-
-        return filename
-
     # Save a feed response based on the store_type
     def __save_feed(self, response, league, season, feed, output_format, params):
         # Save to memory regardless of selected method
@@ -97,31 +86,13 @@ class API_v1_0(object):
         elif output_format == "xml":
             store_output = response.text
         elif output_format == "csv":
-            #store_output = response.content.split('\n')
+            # store_output = response.content.split('\n')
             store_output = response.content.decode('utf-8')
             store_output = csv.reader(store_output.splitlines(), delimiter=',')
             store_output = list(store_output)
 
-        if self.store_type == "file":
-            if not os.path.isdir(self.store_location):
-                os.mkdir(self.store_location)
-
-            filename = self.__make_output_filename(league, season, feed, output_format, params)
-
-            with open(self.store_location + filename, "w") as outfile:
-                if output_format == "json":  # This is JSON
-                    json.dump(store_output, outfile)
-
-                elif output_format == "xml":  # This is xml
-                    outfile.write(store_output)
-
-                elif output_format == "csv":  # This is csv
-                    writer = csv.writer(outfile)
-                    for row in store_output:
-                        writer.writerow([row])
-
-                else:
-                    raise AssertionError("Could not interpret feed output format")
+        if self.data_store is not None:
+            self.data_store.store(store_output, league, season, feed, output_format, params)
 
     # Indicate this version does support BASIC auth
     def supports_basic_auth(self):
@@ -161,13 +132,13 @@ class API_v1_0(object):
                 params[key] = value
 
         # add force=false parameter (helps prevent unnecessary bandwidth use)
-        if not "force" in params:
+        if "force" not in params:
             params['force'] = 'false'
 
-        if self.__verify_feed(feed) == False:
+        if not self.__verify_feed(feed):
             raise ValueError("Unknown feed '" + feed + "'.  Known values are: " + str(self.valid_feeds))
 
-        if self.__verify_format(output_format) == False:
+        if not self.__verify_format(output_format):
             raise ValueError("Unsupported format '" + output_format + "'.")
 
         url = self.determine_url(league, season, feed, output_format, params)
@@ -182,7 +153,7 @@ class API_v1_0(object):
         r = requests.get(url, params=params, headers=self.headers)
 
         if r.status_code == 200:
-            if self.store_type != None:
+            if self.data_store is not None:
                 self.__save_feed(r, league, season, feed, output_format, params)
 
             if output_format == "json":
@@ -196,15 +167,10 @@ class API_v1_0(object):
             if self.verbose:
                 print("Data hasn't changed since last call")
 
-            filename = self.__make_output_filename(league, season, feed, output_format, params)
-
-            with open(self.store_location + filename) as f:
-                if output_format == "json":
-                    data = json.load(f)
-                elif output_format == "xml":
-                    data = str(f.readlines()[0])
-                else:
-                    data = f.read().splitlines()
+            if self.data_store.exists(league, season, feed, output_format, params):
+                data = self.data_store.load(league, season, feed, output_format, params)
+            else:
+                logging.debug("Data hasn't changed since last call but the data does not exist in the store")
 
         else:
             raise Warning("API call failed with error: {error}".format(error=r.status_code))
