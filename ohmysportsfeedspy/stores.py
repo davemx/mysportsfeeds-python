@@ -229,9 +229,9 @@ def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
 
 def _store_temp_file(data: Any, data_format: str) -> NamedTemporaryFile:
     """ Writes the data to a temporary file and returns the file. """
-    encoded_data: Any
+    encoded_data: bytes
     if isinstance(data, str):
-        encoded_data = str(data).encode("UTF-8")
+        encoded_data = bytes(data)
     else:
         encoded_data = data
 
