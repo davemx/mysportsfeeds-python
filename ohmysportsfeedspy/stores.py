@@ -167,7 +167,7 @@ class S3Store(DataStore):
 
         s3_response: Any
 
-        with NamedTemporaryFile(suffix=f".{data_format}") as temp_file:
+        with NamedTemporaryFile(mode="w+", suffix=f".{data_format}") as temp_file:
             _write_data(data, data_format, temp_file)
             temp_file.seek(0)
             try:
