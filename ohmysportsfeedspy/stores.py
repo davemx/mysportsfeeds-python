@@ -7,7 +7,7 @@ import json
 import logging
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, IO, List
+from typing import Any, IO
 import boto3
 from botocore.exceptions import ClientError
 
@@ -231,4 +231,5 @@ def _store_temp_file(data: Any, data_format: str) -> NamedTemporaryFile:
     """ Writes the data to a temporary file and returns the file. """
     temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="w+", suffix=f".{data_format}")
     _write_data(data, data_format, temp_file)
+    temp_file.seek(0)
     return temp_file
