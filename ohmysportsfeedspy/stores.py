@@ -229,13 +229,11 @@ def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
 
 def _store_temp_file(data: Any, data_format: str) -> NamedTemporaryFile:
     """ Writes the data to a temporary file and returns the file. """
-    encoded_data: bytes
     if isinstance(data, str):
-        encoded_data = bytes(data)
+        temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="w+", suffix=f".{data_format}")
     else:
-        encoded_data = data
+        temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="w+b", suffix=f".{data_format}")
 
-    temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="w+b", suffix=f".{data_format}")
-    _write_data(encoded_data, data_format, temp_file)
+    _write_data(data, data_format, temp_file)
     temp_file.seek(0)
     return temp_file
