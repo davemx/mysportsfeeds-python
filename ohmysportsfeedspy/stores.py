@@ -215,7 +215,7 @@ def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
     """ Writes the data to an output stream. """
     if data_format == "json":
         logging.warning("Write Data Type:", type(data))
-        json.dump(data, output_stream)
+        json.dump(data.encode(), output_stream)
     elif data_format == "xml":
         output_stream.write(data)
     elif data_format == "csv":
