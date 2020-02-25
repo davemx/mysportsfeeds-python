@@ -85,7 +85,7 @@ class FileStore(DataStore):
         file_path: Path = self._dir_path / filename
         data: Any
         if file_path.exists():
-            with file_path.open("r+b") as infile:
+            with file_path.open("r+") as infile:
                 data = _load_data(data_format, infile)
         else:
             data = None
@@ -95,7 +95,7 @@ class FileStore(DataStore):
         self._initialize_store()
         filename: str = self.resolve_filename(league, season, feed, data_format, params)
         file_path: Path = self._dir_path / filename
-        with file_path.open("w+b") as file:
+        with file_path.open("w+") as file:
             _write_data(data, data_format, file)
         return file_path
 
