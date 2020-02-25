@@ -85,7 +85,7 @@ class FileStore(DataStore):
         file_path: Path = self._dir_path / filename
         data: Any
         if file_path.exists():
-            with file_path.open("r+") as infile:
+            with file_path.open("r+b") as infile:
                 data = _load_data(data_format, infile)
         else:
             data = None
@@ -95,7 +95,7 @@ class FileStore(DataStore):
         self._initialize_store()
         filename: str = self.resolve_filename(league, season, feed, data_format, params)
         file_path: Path = self._dir_path / filename
-        with file_path.open("w+") as file:
+        with file_path.open("w+b") as file:
             _write_data(data, data_format, file)
         return file_path
 
@@ -229,7 +229,7 @@ def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
 
 def _store_temp_file(data: Any, data_format: str) -> NamedTemporaryFile:
     """ Writes the data to a temporary file and returns the file. """
-    temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="w+", suffix=f".{data_format}")
+    temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="w+b", suffix=f".{data_format}", encoding="UTF-8")
     _write_data(data, data_format, temp_file)
     temp_file.seek(0)
     return temp_file
