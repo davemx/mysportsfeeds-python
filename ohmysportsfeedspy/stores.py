@@ -167,19 +167,16 @@ class S3Store(DataStore):
 
         s3_response: Any
 
-        temp_file_name: str
-        with NamedTemporaryFile(mode="w+", suffix=f".{data_format}", encoding="UTF-8", delete=False) as temp_file:
+        with NamedTemporaryFile(mode="w+", suffix=f".{data_format}", encoding="UTF-8") as temp_file:
             _write_data(data, data_format, temp_file)
-            temp_file_name = temp_file.name
-            temp_file.close()
-
-        try:
-            s3_response = s3_object.upload_file(temp_file_name)
-        except ClientError as e:
-            logging.error(f"S3 client error uploading data file {object_key}"
-                          f" to bucket {self.bucket}: {e}")
-            logging.error(e)
-            s3_response = None
+            temp_file_name: str = temp_file.name
+            try:
+                s3_response = s3_object.upload_file(temp_file_name)
+            except ClientError as e:
+                logging.error(f"S3 client error uploading data file {object_key}"
+                              f" to bucket {self.bucket}: {e}")
+                logging.error(e)
+                s3_response = None
 
         return s3_response
 
