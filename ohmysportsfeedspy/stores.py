@@ -166,7 +166,10 @@ class S3Store(DataStore):
         s3_object = self.bucket.Object(object_key)
 
         s3_response: Any
-        with _store_temp_file(data, data_format) as temp_file:
+
+        with NamedTemporaryFile(suffix=f".{data_format}") as temp_file:
+            _write_data(data, data_format, temp_file)
+            temp_file.seek(0)
             try:
                 s3_response = s3_object.upload_fileobj(temp_file)
             except ClientError as e:
@@ -215,7 +218,7 @@ def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
     """ Writes the data to an output stream. """
     if data_format == "json":
         logging.warning("Write Data Type:", type(data))
-        json.dump(data.encode(), output_stream)
+        json.dump(data, output_stream)
     elif data_format == "xml":
         output_stream.write(data)
     elif data_format == "csv":
@@ -231,6 +234,7 @@ def _write_data(data: Any, data_format: str, output_stream: IO) -> None:
 def _store_temp_file(data: Any, data_format: str) -> NamedTemporaryFile:
     """ Writes the data to a temporary file and returns the file. """
     logging.warning("Store Data Type:", type(data))
+
     temp_file: NamedTemporaryFile = NamedTemporaryFile(mode="w+b", suffix=f".{data_format}")
     _write_data(data, data_format, temp_file)
     temp_file.seek(0)
